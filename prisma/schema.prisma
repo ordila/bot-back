@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+ enum ChatStatus {
+  active
+  stopped
+}
+
+
+
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  firebaseUid     String   @unique 
+  createdAt       DateTime @default(now())
+  openai_api_key  String?
+
+  discordAccounts DiscordAccount[] // Один користувач може мати багато акаунтів Discord
+}
+
+model DiscordAccount {
+  id            String   @id @default(uuid())
+  name          String
+  accountToken  String   
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  discordChats  DiscordChat[] // Один Discord-акаунт може мати багато чатів
+}
+
+model DiscordChat {
+  id               String    @id @default(uuid())
+  discordAccountId String    @map("discord_account_id")
+  discordAccount   DiscordAccount @relation(fields: [discordAccountId], references: [id], onDelete: Cascade)
+ name             String
+  discordChatId    String  // ID чату у Discord
+  min_interval     Int     // Мінімальний інтервал (у секундах)
+  max_interval     Int     // Максимальний інтервал (у секундах)
+  prompt_system    String? // Системний промпт для GPT
+  prompt_user      String? // Юзерський промпт для GPT
+  max_tokens       Int?    
+  temperature      Float?  
+  gpt_model        String? // Наприклад: "gpt-4o-mini"
+  status           ChatStatus // Може бути "active", "paused", "stopped"
+}
