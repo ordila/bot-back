@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { restartActiveBots } from './lib/botManager/botManager';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,6 +15,10 @@ async function bootstrap() {
   });
 
   await restartActiveBots();
-  await app.listen(3001);
+
+  const port = process.env.PORT || 10000;
+  await app.listen(port, '0.0.0.0', () => {
+    console.log(`Сервер запущено на порті ${port}`);
+  });
 }
 bootstrap();
