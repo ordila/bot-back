@@ -158,6 +158,7 @@ export const startBot = async (chatId: string) => {
 
       try {
         const response = await openai.chat.completions.create(requestPayload);
+        console.log('response', response);
         const aiMessage = response.choices[0].message.content;
         await channel.send(aiMessage);
       } catch (error) {
