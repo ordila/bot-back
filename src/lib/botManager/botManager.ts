@@ -16,9 +16,6 @@ const activeBots: Map<string, BotInstance> = new Map();
  * Функція перевіряє, чи підтримує модель system prompt.
  */
 function modelSupportsSystemPrompt(model: string): boolean {
-  // Налаштуйте перелік моделей, які підтримують system prompt.
-  // Наприклад, "4o-mini", "gpt-3.5-turbo" та "gpt-4" підтримують,
-  // а інші можуть не підтримувати.
   const modelsWithSystemPrompt = [
     'gpt-4.5-preview',
     'gpt-4.5-preview-2025-02-27',
@@ -48,8 +45,16 @@ function modelSupportsSystemPrompt(model: string): boolean {
     'gpt-4o-2024-08-06',
     'gpt-4o',
   ];
-
   return modelsWithSystemPrompt.includes(model);
+}
+
+/**
+ * Функція визначає, чи потрібно використовувати max_completion_tokens замість max_tokens.
+ * Згідно з повідомленням від OpenAI, лише o1-серія (наприклад, "o1-mini", "o1-preview" тощо) підтримує max_completion_tokens.
+ */
+function requiresMaxCompletionTokens(model: string): boolean {
+  // Якщо модель починається з "o1-" або дорівнює "o1", то вона належить до o1-серії.
+  return model.startsWith('o1-') || model === 'o1';
 }
 
 /**
@@ -66,7 +71,6 @@ function formatMessages(
       { role: 'user', content: userPrompt || '...' },
     ];
   } else {
-    // Якщо модель не підтримує system prompt, об'єднуємо обидва повідомлення в одне.
     const combined = `${systemPrompt || ''}\n${userPrompt || ''}`.trim();
     return [{ role: 'user', content: combined }];
   }
@@ -130,7 +134,6 @@ export const startBot = async (chatId: string) => {
         return;
       }
 
-      // Використовуємо функцію formatMessages для уніфікації формування повідомлень.
       const model = updatedChat.gpt_model || 'gpt-4o-mini';
       const messages = formatMessages(
         model,
@@ -138,21 +141,27 @@ export const startBot = async (chatId: string) => {
         updatedChat.prompt_user,
       );
 
-      try {
-        const response = await openai.chat.completions.create({
-          model: model,
-          messages: messages as any,
-          max_tokens: updatedChat.max_tokens || 100,
-          temperature: updatedChat.temperature || 0.7,
-        });
+      // Формуємо параметри запиту залежно від моделі
+      const requestPayload: any = {
+        model: model,
+        messages: messages as any,
+        temperature: updatedChat.temperature || 0.7,
+      };
 
+      if (requiresMaxCompletionTokens(model)) {
+        requestPayload.max_completion_tokens = updatedChat.max_tokens || 100;
+      } else {
+        requestPayload.max_tokens = updatedChat.max_tokens || 100;
+      }
+
+      try {
+        const response = await openai.chat.completions.create(requestPayload);
         const aiMessage = response.choices[0].message.content;
         await channel.send(aiMessage);
       } catch (error) {
         console.error('❌ Помилка OpenAI API:', error);
       }
 
-      // Генеруємо інтервал
       const interval =
         updatedChat.min_interval === updatedChat.max_interval
           ? updatedChat.min_interval * 1000
@@ -166,10 +175,10 @@ export const startBot = async (chatId: string) => {
       console.log(`⏳ Наступне повідомлення через ${interval / 1000} секунд.`);
 
       const intervalId = setTimeout(sendMessage, interval);
-      activeBots.set(chatId, { client, chatId, intervalId }); // Оновлюємо activeBots
+      activeBots.set(chatId, { client, chatId, intervalId });
     };
 
-    sendMessage(); // Викликаємо одразу після логіну
+    sendMessage();
   });
 
   client.login(chat.discordAccount.accountToken);
