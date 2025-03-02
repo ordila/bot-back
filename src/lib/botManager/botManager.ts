@@ -1,6 +1,5 @@
 import { Client, TextChannel } from 'discord.js-selfbot-v13';
 import OpenAI from 'openai';
-
 import { ChatStatus, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -12,6 +11,66 @@ interface BotInstance {
 }
 
 const activeBots: Map<string, BotInstance> = new Map();
+
+/**
+ * Функція перевіряє, чи підтримує модель system prompt.
+ */
+function modelSupportsSystemPrompt(model: string): boolean {
+  // Налаштуйте перелік моделей, які підтримують system prompt.
+  // Наприклад, "4o-mini", "gpt-3.5-turbo" та "gpt-4" підтримують,
+  // а інші можуть не підтримувати.
+  const modelsWithSystemPrompt = [
+    'gpt-4.5-preview',
+    'gpt-4.5-preview-2025-02-27',
+    'gpt-4o-mini-realtime-preview-2024-12-17',
+    'gpt-4o-mini-realtime-preview',
+    'gpt-4-turbo',
+    'gpt-4o-realtime-preview-2024-10-01',
+    'gpt-4',
+    'chatgpt-4o-latest',
+    'gpt-4-turbo-preview',
+    'gpt-4-0125-preview',
+    'gpt-4-turbo-2024-04-09',
+    'gpt-3.5-turbo-1106',
+    'gpt-3.5-turbo-instruct',
+    'gpt-4o-2024-11-20',
+    'gpt-3.5-turbo-instruct-0914',
+    'gpt-3.5-turbo-0125',
+    'gpt-4o-realtime-preview-2024-12-17',
+    'gpt-3.5-turbo',
+    'gpt-4o-realtime-preview',
+    'gpt-3.5-turbo-16k',
+    'gpt-4-1106-preview',
+    'gpt-4-0613',
+    'gpt-4o-mini-2024-07-18',
+    'gpt-4o-2024-05-13',
+    'gpt-4o-mini',
+    'gpt-4o-2024-08-06',
+    'gpt-4o',
+  ];
+
+  return modelsWithSystemPrompt.includes(model);
+}
+
+/**
+ * Формуємо повідомлення для запиту до OpenAI API залежно від можливостей моделі.
+ */
+function formatMessages(
+  model: string,
+  systemPrompt?: string,
+  userPrompt?: string,
+): { role: string; content: string }[] {
+  if (modelSupportsSystemPrompt(model)) {
+    return [
+      { role: 'system', content: systemPrompt || '...' },
+      { role: 'user', content: userPrompt || '...' },
+    ];
+  } else {
+    // Якщо модель не підтримує system prompt, об'єднуємо обидва повідомлення в одне.
+    const combined = `${systemPrompt || ''}\n${userPrompt || ''}`.trim();
+    return [{ role: 'user', content: combined }];
+  }
+}
 
 // ✅ Запуск бота
 export const startBot = async (chatId: string) => {
@@ -71,14 +130,17 @@ export const startBot = async (chatId: string) => {
         return;
       }
 
-      const messages = [
-        { role: 'system', content: updatedChat.prompt_system || '...' },
-        { role: 'user', content: updatedChat.prompt_user || '...' },
-      ];
+      // Використовуємо функцію formatMessages для уніфікації формування повідомлень.
+      const model = updatedChat.gpt_model || 'gpt-4o-mini';
+      const messages = formatMessages(
+        model,
+        updatedChat.prompt_system,
+        updatedChat.prompt_user,
+      );
 
       try {
         const response = await openai.chat.completions.create({
-          model: updatedChat.gpt_model || 'gpt-4o-mini',
+          model: model,
           messages: messages as any,
           max_tokens: updatedChat.max_tokens || 100,
           temperature: updatedChat.temperature || 0.7,
