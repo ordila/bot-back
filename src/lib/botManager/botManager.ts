@@ -49,11 +49,11 @@ function modelSupportsSystemPrompt(model: string): boolean {
 }
 
 /**
- * Функція визначає, чи потрібно використовувати max_completion_tokens замість max_tokens.
- * Згідно з повідомленням від OpenAI, лише o1-серія (наприклад, "o1-mini", "o1-preview" тощо) підтримує max_completion_tokens.
+ * Функція визначає, чи модель належить до o1-серії.
+ * Для моделей о1-серії використовуються: max_completion_tokens замість max_tokens,
+ * а також підтримується лише стандартне значення temperature (1).
  */
-function requiresMaxCompletionTokens(model: string): boolean {
-  // Якщо модель починається з "o1-" або дорівнює "o1", то вона належить до o1-серії.
+function isO1Series(model: string): boolean {
   return model.startsWith('o1-') || model === 'o1';
 }
 
@@ -145,13 +145,15 @@ export const startBot = async (chatId: string) => {
       const requestPayload: any = {
         model: model,
         messages: messages as any,
-        temperature: updatedChat.temperature || 0.7,
       };
 
-      if (requiresMaxCompletionTokens(model)) {
+      // Якщо модель належить до o1-серії, використовуємо max_completion_tokens та примусово temperature=1.
+      if (isO1Series(model)) {
         requestPayload.max_completion_tokens = updatedChat.max_tokens || 100;
+        requestPayload.temperature = 1;
       } else {
         requestPayload.max_tokens = updatedChat.max_tokens || 100;
+        requestPayload.temperature = updatedChat.temperature || 0.7;
       }
 
       try {
